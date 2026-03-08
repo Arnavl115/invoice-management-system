@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinancePro | DBMS Project Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="overflow-x-hidden">
+
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-80 border-r border-[#1e1e1e] bg-black hidden lg:flex flex-col p-12 z-50">
+        <div class="flex items-center gap-3 mb-24">
+            <div class="w-10 h-10 bg-white rounded flex items-center justify-center">
+                <div class="w-5 h-5 border-2 border-black"></div>
+            </div>
+            <span class="text-2xl font-black tracking-tighter uppercase">FinancePro</span>
+        </div>
+
+        <div class="flex-1 space-y-16">
+            <div>
+                <p class="label-minimal mb-8">System View</p>
+                <nav class="space-y-6">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-link nav-active flex items-center gap-4 opacity-50 hover:opacity-100 transition">
+                        <i class="fas fa-grid-2 text-sm"></i>
+                        <span class="text-sm font-bold tracking-tight">Financial Intel</span>
+                    </button>
+                    <button onclick="switchTab('invoices')" id="nav-invoices" class="nav-link flex items-center gap-4 opacity-50 hover:opacity-100 transition">
+                        <i class="fas fa-file-invoice-dollar text-sm"></i>
+                        <span class="text-sm font-bold tracking-tight">Invoice Ledger</span>
+                    </button>
+                    <button onclick="switchTab('expenses')" id="nav-expenses" class="nav-link flex items-center gap-4 opacity-50 hover:opacity-100 transition">
+                        <i class="fas fa-receipt text-sm"></i>
+                        <span class="text-sm font-bold tracking-tight">Expense Tracker</span>
+                    </button>
+                    <button onclick="switchTab('sql')" id="nav-sql" class="nav-link flex items-center gap-4 opacity-50 hover:opacity-100 transition">
+                        <i class="fas fa-database text-sm text-blue-500"></i>
+                        <span class="text-sm font-bold tracking-tight">Oracle Console</span>
+                    </button>
+                </nav>
+            </div>
+
+            <div>
+                <p class="label-minimal mb-8">Schema Metadata</p>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span class="text-[11px] font-bold text-neutral-400">8 RELATIONAL TABLES</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="lg:ml-80 min-h-screen p-12 lg:p-24">
+        
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-24 gap-8">
+            <div>
+                <p class="label-minimal mb-2">Finance Management / DBMS</p>
+                <h1 class="text-7xl font-black tracking-tighter" id="page-title">Intel</h1>
+            </div>
+            <div class="flex items-center gap-6">
+                <button onclick="openModal()" class="btn-pill bg-white text-black px-10 py-5 text-[10px] hover:bg-neutral-200 transition-transform active:scale-95">
+                    Add Transaction
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD TAB -->
+        <section id="tab-dashboard" class="space-y-32">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
+                <div class="card-oled p-12 rounded-lg">
+                    <p class="label-minimal mb-6">Invoiced Total</p>
+                    <h3 class="text-5xl font-black tracking-tighter" id="stat-revenue">₹0</h3>
+                </div>
+                <div class="card-oled p-12 rounded-lg">
+                    <p class="label-minimal mb-6">Expense Outflow</p>
+                    <h3 class="text-5xl font-black tracking-tighter" id="stat-expenses">₹0</h3>
+                </div>
+                <div class="card-oled p-12 rounded-lg">
+                    <p class="label-minimal mb-6">Payment Pending</p>
+                    <h3 class="text-5xl font-black tracking-tighter text-neutral-500" id="stat-pending">₹0</h3>
+                </div>
+                <div class="card-oled p-12 rounded-lg border-white/20">
+                    <p class="label-minimal mb-6 text-white">Net Liquidity</p>
+                    <h3 class="text-5xl font-black tracking-tighter" id="stat-net">₹0</h3>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-32">
+                <div class="space-y-12">
+                    <p class="label-minimal">Allocated vs Utilized</p>
+                    <div class="h-[350px]">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+                <div class="space-y-12">
+                    <p class="label-minimal">Tax Component Analysis</p>
+                    <div class="h-[350px] flex justify-center">
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- INVOICES TAB -->
+        <section id="tab-invoices" class="hidden space-y-16">
+            <p class="label-minimal">Invoice Registry (Table: Invoice)</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="border-b border-[#1e1e1e]">
+                            <th class="label-minimal py-8">ID (PK)</th>
+                            <th class="label-minimal py-8">Client (FK)</th>
+                            <th class="label-minimal py-8">Invoice Date</th>
+                            <th class="label-minimal py-8">Total Amount</th>
+                            <th class="label-minimal py-8 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoice-list" class="divide-y divide-[#111]"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- EXPENSES TAB -->
+        <section id="tab-expenses" class="hidden space-y-16">
+            <p class="label-minimal">Expense Ledger (Table: Expense)</p>
+            <div id="expense-list" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
+        </section>
+
+        <!-- SQL CONSOLE -->
+        <section id="tab-sql" class="hidden space-y-12">
+            <div class="flex justify-between items-end">
+                <div>
+                    <p class="label-minimal mb-2">Relational Logic</p>
+                    <h2 class="text-4xl font-black tracking-tighter">Schema Implementation</h2>
+                </div>
+                <button onclick="copySql()" class="text-[10px] font-bold border border-[#333] px-6 py-3 rounded-full hover:bg-white hover:text-black transition uppercase tracking-widest">Copy DDL/DML</button>
+            </div>
+            <div id="sql-log" class="bg-[#050505] border border-[#1e1e1e] p-12 rounded-lg font-mono text-sm leading-relaxed text-neutral-400 overflow-auto max-h-[600px]"></div>
+        </section>
+    </main>
+
+    <!-- MODAL -->
+    <div id="modal-container" class="fixed inset-0 glass-modal z-[100] hidden items-center justify-center p-12">
+        <div class="w-full max-w-6xl space-y-16">
+            <div class="flex justify-between items-center">
+                <h2 class="text-6xl font-black tracking-tighter">New Entry</h2>
+                <button onclick="closeModal()" class="w-20 h-20 rounded-full border border-[#222] flex items-center justify-center hover:bg-white hover:text-black transition">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-32">
+                <!-- INVOICE FORM -->
+                <form onsubmit="handleInvoice(event)" class="space-y-8">
+                    <p class="label-minimal">Invoice & Items (Composite PK Support)</p>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" name="client" placeholder="CLIENT_NAME" required>
+                        <select name="tax_id" class="w-full">
+                            <option value="1">GST (18%)</option>
+                            <option value="2">VAT (5%)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-4 pt-4 border-t border-[#111]">
+                        <div class="grid grid-cols-3 gap-2">
+                            <input type="text" id="item-desc" placeholder="DESC" class="col-span-1">
+                            <input type="number" id="item-qty" placeholder="QTY" class="col-span-1">
+                            <input type="number" id="item-price" placeholder="PRICE" class="col-span-1">
+                        </div>
+                        <button type="button" onclick="addTempItem()" class="w-full py-4 border border-[#222] text-[10px] font-bold tracking-widest hover:bg-[#111]">APPEND ITEM</button>
+                        <div id="temp-items" class="space-y-2 max-h-32 overflow-y-auto"></div>
+                    </div>
+                    <button type="submit" class="w-full bg-white text-black py-6 font-black tracking-widest uppercase text-xs">Execute SQL Insert</button>
+                </form>
+
+                <!-- EXPENSE FORM -->
+                <form onsubmit="handleExpense(event)" class="space-y-8 border-l border-[#1e1e1e] lg:pl-32">
+                    <p class="label-minimal">Expense Entry (Ref: Business)</p>
+                    <input type="text" name="desc" placeholder="EXPENSE_DESCRIPTION" required class="w-full">
+                    <input type="number" name="amount" placeholder="AMOUNT (DECIMAL)" required class="w-full">
+                    <p class="text-[10px] text-neutral-600">Business ID defaults to system root (1).</p>
+                    <button type="submit" class="w-full border-2 border-white text-white py-6 font-black tracking-widest uppercase text-xs hover:bg-white hover:text-black">Log Outflow</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InvoiceS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+
+    <!-- Excel & File IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+
+<body class="overflow-x-hidden">
+
+    <!-- AUTHENTICATION OVERLAY -->
+    <div id="auth-overlay"
+        class="fixed inset-0 bg-black z-[200] flex items-center justify-center p-12 transition-opacity duration-500">
+        <div class="w-full max-w-md card-oled p-12 rounded-lg space-y-8">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 bg-white rounded flex items-center justify-center">
+                    <div class="w-5 h-5 border-2 border-black"></div>
+                </div>
+                <span class="text-2xl font-black tracking-tighter uppercase">InvoiceS Auth</span>
+            </div>
+
+            <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-6">
+                <div>
+                    <p class="label-minimal mb-2">Email Address</p>
+                    <input type="email" id="auth-email" required class="w-full">
+                </div>
+                <div>
+                    <p class="label-minimal mb-2">Password</p>
+                    <input type="password" id="auth-password" required class="w-full">
+                </div>
+                <div id="auth-error" class="hidden text-red-500 text-[10px] font-bold tracking-widest uppercase"></div>
+
+                <div class="pt-4 flex flex-col gap-4">
+                    <button type="submit" onclick="setAuthMode('login')"
+                        class="w-full bg-white text-black py-4 font-black tracking-widest uppercase text-xs">Authenticate</button>
+                    <button type="button" onclick="submitRegister()"
+                        class="w-full border border-[#333] text-white py-4 font-black tracking-widest uppercase text-xs hover:bg-[#111] btn-inverted text-color-inverted border-inverted hover-inverted">Register
+                        Credentials</button>
+                    <button type="button" onclick="loadDemo()"
+                        class="w-full text-neutral-500 py-2 font-bold tracking-widest uppercase text-[9px] hover:text-white mt-2">Bypass
+                        / Load Demo</button>
+                </div>
+            </form>
+            <div class="text-[10px] text-neutral-600 font-mono text-center">
+                Configure Firebase credentials in script.js
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER (hidden until auth) -->
+    <div id="app-container" class="opacity-0 pointer-events-none transition-opacity duration-500">
+        <!-- Sidebar -->
+        <aside
+            class="fixed left-0 top-0 h-full w-80 border-r border-[#1e1e1e] bg-black hidden lg:flex flex-col p-8 z-50 transition-colors duration-500 aside-theme">
+            <div class="flex items-center gap-3 mb-12">
+                <div class="w-10 h-10 bg-white rounded flex items-center justify-center brand-icon">
+                    <div class="w-5 h-5 border-2 border-black brand-inner"></div>
+                </div>
+                <span class="text-2xl font-black tracking-tighter uppercase brand-text">InvoiceS</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto space-y-8 pr-2">
+                <div>
+                    <p class="label-minimal mb-6">System View</p>
+                    <nav class="space-y-2">
+                        <button onclick="switchTab('dashboard')" id="nav-dashboard"
+                            class="nav-link nav-active flex items-center gap-4 transition w-full text-left">
+                            <i class="fas fa-file-invoice-dollar text-sm w-6 text-center"></i>
+                            <span class="text-sm font-bold tracking-tight">Financial Intel</span>
+                        </button>
+                        <button onclick="switchTab('invoices')" id="nav-invoices"
+                            class="nav-link flex items-center gap-4 transition w-full text-left">
+                            <i class="fas fa-file-invoice-dollar text-sm w-6 text-center"></i>
+                            <span class="text-sm font-bold tracking-tight">Invoice Ledger</span>
+                        </button>
+                        <button onclick="switchTab('expenses')" id="nav-expenses"
+                            class="nav-link flex items-center gap-4 transition w-full text-left">
+                            <i class="fas fa-receipt text-sm w-6 text-center"></i>
+                            <span class="text-sm font-bold tracking-tight">Expense Tracker</span>
+                        </button>
+                        <button onclick="switchTab('sql')" id="nav-sql"
+                            class="nav-link flex items-center gap-4 transition w-full text-left">
+                            <i class="fas fa-database text-sm w-6 text-center text-blue-500"></i>
+                            <span class="text-sm font-bold tracking-tight">Oracle Console</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <div class="mt-auto space-y-4 pt-8 border-t border-[#1e1e1e] border-inverted">
+                <div class="space-y-2 mb-6">
+                    <button onclick="toggleTheme()"
+                        class="nav-link flex items-center gap-4 transition w-full text-left border border-[#222] border-inverted hover:bg-[#111] hover-inverted">
+                        <i class="fas fa-palette text-sm w-6 text-center"></i>
+                        <span class="text-xs font-bold tracking-tight uppercase" id="theme-btn-sidebar">Theme:
+                            OLED</span>
+                    </button>
+                    <button onclick="toggleCalculator()"
+                        class="nav-link flex items-center gap-4 transition w-full text-left border border-[#222] border-inverted hover:bg-[#111] hover-inverted">
+                        <i class="fas fa-calculator text-sm w-6 text-center"></i>
+                        <span class="text-xs font-bold tracking-tight uppercase">Calculator</span>
+                    </button>
+                    <button onclick="handleLogout()"
+                        class="nav-link flex items-center gap-4 transition w-full text-left bg-red-950/30 text-red-500 hover:bg-red-900/50 mt-4 rounded-full">
+                        <i class="fas fa-sign-out-alt text-sm w-6 text-center"></i>
+                        <span class="text-xs font-bold tracking-tight uppercase">Sign Out</span>
+                    </button>
+                </div>
+
+                <p class="label-minimal mb-3">Project Team</p>
+                <div class="flex -space-x-2">
+                    <button onclick="openTeamModal('Arnav Gupta', '24BCE1204')"
+                        class="w-8 h-8 rounded-full bg-blue-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white z-30 hover:z-40 transition-transform hover:scale-110">AG</button>
+                    <button onclick="openTeamModal('Ayushi Das', '24BCE1438')"
+                        class="w-8 h-8 rounded-full bg-green-500 border-2 border-black flex items-center justify-center text-[9px] font-bold text-white z-20 hover:z-40 transition-transform hover:scale-110">AY</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="lg:ml-80 min-h-screen p-6 lg:p-8 transition-colors duration-500">
+
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+                <h1 class="text-5xl lg:text-7xl font-black tracking-tighter" id="page-title">Intel</h1>
+                <div class="flex flex-wrap items-center gap-4">
+                    <button onclick="exportToExcel()"
+                        class="btn-pill border border-[#222] px-6 py-3 text-[10px] hover:bg-[#111] transition border-inverted hover-inverted flex items-center gap-2">
+                        <i class="fas fa-download"></i> DOWNLOAD SHEET
+                    </button>
+                    <button onclick="document.getElementById('import-file').click()"
+                        class="btn-pill border border-[#222] px-6 py-3 text-[10px] hover:bg-[#111] transition border-inverted hover-inverted flex items-center gap-2">
+                        <i class="fas fa-upload"></i> IMPORT SHEET
+                    </button>
+                    <input type="file" id="import-file" accept=".xlsx" class="hidden" onchange="importFromExcel(event)">
+                    <button onclick="openModal()"
+                        class="btn-pill bg-white text-black px-8 py-3 text-[10px] hover:bg-neutral-200 transition-transform active:scale-95 text-color-inverted hover-inverted-bg">
+                        ADD TRANSACTION
+                    </button>
+                </div>
+            </header>
+
+            <!-- DASHBOARD TAB -->
+            <section id="tab-dashboard" class="space-y-8">
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 min-w-0">
+                    <div class="card-oled p-6 rounded-2xl cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('revenue')">
+                        <p class="label-minimal mb-2">Invoiced Total</p>
+                        <h3 class="text-3xl font-black tracking-tighter truncate" id="stat-revenue">₹0</h3>
+                    </div>
+                    <div class="card-oled p-6 rounded-2xl cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('expenses')">
+                        <p class="label-minimal mb-2">Expense Outflow</p>
+                        <h3 class="text-3xl font-black tracking-tighter truncate" id="stat-expenses">₹0</h3>
+                    </div>
+                    <div class="card-oled p-6 rounded-2xl cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('pending')">
+                        <p class="label-minimal mb-2">Payment Pending</p>
+                        <h3 class="text-3xl font-black tracking-tighter text-neutral-500 truncate" id="stat-pending">₹0
+                        </h3>
+                    </div>
+                    <div class="card-oled p-6 rounded-2xl border-white/20 cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('net')">
+                        <p class="label-minimal mb-2 text-white theme-text">Net Liquidity</p>
+                        <h3 class="text-3xl font-black tracking-tighter truncate" id="stat-net">₹0</h3>
+                    </div>
+                    <div class="card-oled p-6 rounded-2xl cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('burn')">
+                        <p class="label-minimal mb-2 text-neutral-500">Burn Rate (Avg/Mo)</p>
+                        <h3 class="text-3xl font-black tracking-tighter text-red-500 truncate" id="stat-burn">₹0</h3>
+                    </div>
+                    <div class="card-oled p-6 rounded-2xl cursor-pointer overflow-hidden"
+                        onclick="openKpiModal('variance')">
+                        <p class="label-minimal mb-2 text-neutral-500">Budget Var</p>
+                        <h3 class="text-3xl font-black tracking-tighter text-blue-500 truncate" id="stat-variance">0%
+                        </h3>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="card-oled p-6 rounded-lg space-y-4">
+                        <div class="flex justify-between items-center">
+                            <p class="label-minimal">Allocated vs Utilized</p>
+                            <button onclick="openChartModal('barChartModalCanvas')"
+                                class="text-[10px] text-neutral-500 hover:text-white theme-text-hover"><i
+                                    class="fas fa-expand"></i></button>
+                        </div>
+                        <div class="h-[250px] cursor-pointer" onclick="openChartModal('barChartModalCanvas')">
+                            <canvas id="barChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-oled p-6 rounded-lg space-y-4">
+                        <div class="flex justify-between items-center">
+                            <p class="label-minimal">Tax Component Analysis</p>
+                            <button onclick="openChartModal('doughnutChartModalCanvas')"
+                                class="text-[10px] text-neutral-500 hover:text-white theme-text-hover"><i
+                                    class="fas fa-expand"></i></button>
+                        </div>
+                        <div class="h-[250px] flex justify-center cursor-pointer"
+                            onclick="openChartModal('doughnutChartModalCanvas')">
+                            <canvas id="doughnutChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-oled p-6 rounded-lg space-y-4">
+                        <div class="flex justify-between items-center">
+                            <p class="label-minimal">Expense Velocity (Trend)</p>
+                            <button onclick="openChartModal('lineChartModalCanvas')"
+                                class="text-[10px] text-neutral-500 hover:text-white theme-text-hover"><i
+                                    class="fas fa-expand"></i></button>
+                        </div>
+                        <div class="h-[250px] cursor-pointer" onclick="openChartModal('lineChartModalCanvas')">
+                            <canvas id="lineChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-oled p-6 rounded-lg space-y-4">
+                        <div class="flex justify-between items-center">
+                            <p class="label-minimal">Cash Flow Distribution</p>
+                            <button onclick="openChartModal('radarChartModalCanvas')"
+                                class="text-[10px] text-neutral-500 hover:text-white theme-text-hover"><i
+                                    class="fas fa-expand"></i></button>
+                        </div>
+                        <div class="h-[250px] flex justify-center cursor-pointer"
+                            onclick="openChartModal('radarChartModalCanvas')">
+                            <canvas id="radarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- INVOICES TAB -->
+            <section id="tab-invoices" class="hidden space-y-6">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-5xl font-black tracking-tighter">Ledger</h2>
+                </div>
+                <div class="card-oled rounded-2xl p-6 border border-[#1e1e1e] border-inverted">
+                    <div class="flex justify-between items-center mb-8 border-b border-[#1e1e1e] border-inverted pb-4">
+                        <span class="label-minimal">Authorized Ledger</span>
+                        <button class="border border-[#333] border-inverted px-4 py-1 text-[10px] font-bold rounded"
+                            id="invoice-count-btn">0 RECORDS</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse table-fixed min-w-[800px]">
+                            <thead>
+                                <tr
+                                    class="text-[10px] uppercase font-bold tracking-widest text-neutral-500 border-b border-transparent">
+                                    <th class="w-1/6 pb-4">REF</th>
+                                    <th class="w-1/4 pb-4">SECTOR</th>
+                                    <th class="w-1/3 pb-4">DESCRIPTION</th>
+                                    <th class="w-1/6 pb-4 text-right pr-4">VALUE</th>
+                                    <th class="w-1/12 pb-4 text-center">OPT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoice-list" class="divide-y divide-transparent mt-4 block lg:table-row-group">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- EXPENSES TAB -->
+            <section id="tab-expenses" class="hidden space-y-6">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-5xl font-black tracking-tighter">Ledger</h2>
+                </div>
+                <div class="card-oled rounded-2xl p-6 border border-[#1e1e1e] border-inverted">
+                    <div class="flex justify-between items-center mb-8 border-b border-[#1e1e1e] border-inverted pb-4">
+                        <span class="label-minimal">Authorized Ledger</span>
+                        <button class="border border-[#333] border-inverted px-4 py-1 text-[10px] font-bold rounded"
+                            id="expense-count-btn">0 RECORDS</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse table-fixed min-w-[800px]">
+                            <thead>
+                                <tr
+                                    class="text-[10px] uppercase font-bold tracking-widest text-neutral-500 border-b border-transparent">
+                                    <th class="w-1/6 pb-4">REF</th>
+                                    <th class="w-1/4 pb-4">SECTOR</th>
+                                    <th class="w-1/3 pb-4">DESCRIPTION</th>
+                                    <th class="w-1/6 pb-4 text-right pr-4">VALUE</th>
+                                    <th class="w-1/12 pb-4 text-center">OPT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expense-list" class="divide-y divide-transparent mt-4 block lg:table-row-group">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SQL CONSOLE -->
+            <section id="tab-sql" class="hidden space-y-6">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <p class="label-minimal mb-2">Relational Logic</p>
+                        <h2 class="text-3xl font-black tracking-tighter">Schema Implementation</h2>
+                    </div>
+                    <button onclick="copySql()"
+                        class="text-[10px] font-bold border border-[#333] px-6 py-3 rounded-full hover:bg-white hover:text-black transition uppercase tracking-widest border-inverted hover-inverted text-color-inverted">Copy
+                        DDL/DML</button>
+                </div>
+                <div id="sql-log"
+                    class="bg-[#050505] border border-[#1e1e1e] border-inverted p-6 rounded-lg font-mono text-sm leading-relaxed text-neutral-400 overflow-auto max-h-[500px] bg-inverted-card">
+                </div>
+            </section>
+        </main>
+
+        <!-- MAIN TRANSACTION MODAL -->
+        <div id="modal-container" class="fixed inset-0 glass-modal z-[100] hidden items-center justify-center p-6">
+            <div class="w-full max-w-5xl space-y-8 card-oled p-10 rounded-[24px]">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-4xl font-black tracking-tighter theme-text">New Entry</h2>
+                    <button onclick="closeModal()"
+                        class="w-12 h-12 rounded-full border border-[#222] border-inverted flex items-center justify-center hover:bg-white hover:text-black hover-inverted transition tool-btn">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
+                    <!-- INVOICE FORM -->
+                    <form onsubmit="handleInvoice(event)" class="space-y-6">
+                        <p class="label-minimal">Invoice & Items (Composite PK Support)</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="text" name="client" placeholder="CLIENT_NAME" required class="input-theme">
+                            <select name="tax_id" class="w-full input-theme">
+                                <option value="1">GST (18%)</option>
+                                <option value="2">VAT (5%)</option>
+                            </select>
+                        </div>
+                        <div class="space-y-4 pt-4 border-t border-[#111] border-inverted">
+                            <div class="grid grid-cols-3 gap-2">
+                                <input type="text" id="item-desc" placeholder="DESC" class="col-span-1 input-theme">
+                                <input type="number" id="item-qty" placeholder="QTY" class="col-span-1 input-theme">
+                                <input type="number" id="item-price" placeholder="PRICE" class="col-span-1 input-theme">
+                            </div>
+                            <button type="button" onclick="addTempItem()"
+                                class="w-full py-4 border border-[#222] text-[10px] font-bold tracking-widest hover:bg-[#111] border-inverted hover-inverted text-color-inverted transition">APPEND
+                                ITEM</button>
+                            <div id="temp-items" class="space-y-2 max-h-32 overflow-y-auto"></div>
+                        </div>
+                        <button type="submit"
+                            class="w-full bg-white text-black py-4 font-black tracking-widest uppercase text-xs btn-inverted-bg text-color-inverted-bg">Execute
+                            SQL Insert</button>
+                    </form>
+
+                    <!-- EXPENSE FORM -->
+                    <form onsubmit="handleExpense(event)"
+                        class="space-y-6 border-t lg:border-t-0 lg:border-l border-[#1e1e1e] border-inverted pt-6 lg:pt-0 lg:pl-16">
+                        <p class="label-minimal">Expense Entry (Ref: Business)</p>
+                        <input type="text" name="desc" placeholder="EXPENSE_DESCRIPTION" required
+                            class="w-full input-theme">
+                        <input type="number" name="amount" placeholder="AMOUNT (DECIMAL)" required
+                            class="w-full input-theme">
+                        <p class="text-[10px] text-neutral-600">Business ID defaults to system root (1).</p>
+                        <button type="submit"
+                            class="w-full border-2 border-white text-white py-4 font-black tracking-widest uppercase text-xs hover:bg-white hover:text-black transition border-inverted text-color-inverted hover-inverted">Log
+                            Outflow</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- DETAILED CHART MODAL -->
+        <div id="chart-modal" class="fixed inset-0 glass-modal z-[150] hidden items-center justify-center p-6">
+            <div class="w-full max-w-6xl card-oled p-10 rounded-[24px] space-y-6 h-[80vh] flex flex-col">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="label-minimal mb-2">Detailed Analysis</p>
+                        <h2 class="text-3xl font-black tracking-tighter theme-text" id="chart-modal-title">Graph Detail
+                        </h2>
+                    </div>
+                    <button onclick="closeChartModal()"
+                        class="w-12 h-12 rounded-full border border-[#222] border-inverted flex items-center justify-center hover:bg-white hover:text-black hover-inverted transition tool-btn">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div
+                    class="flex-1 w-full bg-[#050505] bg-inverted-card rounded-2xl border border-[#1e1e1e] border-inverted p-4 relative flex items-center justify-center">
+                    <canvas id="detailedChartCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI DETAIL MODAL -->
+        <div id="kpi-modal"
+            class="fixed inset-0 glass-modal z-[150] hidden items-center justify-center p-6 transition-opacity duration-300">
+            <div class="w-full max-w-2xl card-oled p-10 rounded-[24px] space-y-8">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="label-minimal mb-2 text-blue-500">Metric Breakdown</p>
+                        <h2 class="text-5xl font-black tracking-tighter theme-text" id="kpi-modal-title">Metric</h2>
+                    </div>
+                    <button onclick="closeKpiModal()"
+                        class="w-12 h-12 shrink-0 rounded-full border border-[#222] border-inverted flex items-center justify-center hover:bg-white hover:text-black hover-inverted transition tool-btn">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+
+                <div class="py-8 border-y border-[#1e1e1e] border-inverted">
+                    <h3 class="text-7xl font-black tracking-tighter theme-text break-words" id="kpi-modal-value">0</h3>
+                </div>
+
+                <div class="space-y-4">
+                    <p class="label-minimal">Calculation Methodology</p>
+                    <p class="text-sm leading-relaxed text-neutral-400 theme-text font-mono bg-[#050505] bg-inverted-card p-6 rounded-2xl border border-[#1e1e1e] border-inverted"
+                        id="kpi-modal-desc">
+                        Explanation
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEAM MODAL -->
+        <div id="team-modal"
+            class="fixed inset-0 glass-modal z-[150] hidden items-center justify-center p-6 transition-opacity duration-300">
+            <div class="w-full max-w-md card-oled p-10 rounded-[24px] space-y-8 text-center">
+                <div class="flex justify-end">
+                    <button onclick="closeTeamModal()"
+                        class="w-10 h-10 shrink-0 rounded-full border border-[#222] border-inverted flex items-center justify-center hover:bg-white hover:text-black hover-inverted transition tool-btn">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
+                </div>
+                <div>
+                    <div class="w-24 h-24 mx-auto rounded-full bg-blue-500 border-4 border-black mb-6 flex items-center justify-center text-4xl font-bold text-white shadow-xl"
+                        id="team-modal-avatar">
+                        A
+                    </div>
+                    <p class="label-minimal mb-2 text-blue-500">Project Contributor</p>
+                    <h2 class="text-3xl font-black tracking-tighter theme-text mb-2" id="team-modal-name">Name</h2>
+                    <p class="text-neutral-500 font-mono tracking-widest text-sm" id="team-modal-reg">Register No</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- FLOATING CALCULATOR -->
+        <div id="calculator-window"
+            class="calculator-window card-oled shadow-2xl hidden flex-col rounded-[24px] overflow-hidden">
+            <div class="p-4 border-b border-[#1e1e1e] border-inverted flex justify-between items-center cursor-move bg-[#0a0a0a] bg-inverted-card"
+                id="calc-header">
+                <span class="text-xs font-bold tracking-widest uppercase text-neutral-500">Calculator</span>
+                <button onclick="toggleCalculator()" class="text-neutral-500 hover:text-white theme-text-hover"><i
+                        class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4 space-y-4 flex-1">
+                <div
+                    class="w-full bg-[#000] input-theme rounded border border-[#1e1e1e] border-inverted p-4 text-right">
+                    <p id="calc-history" class="text-[10px] text-neutral-500 h-4 break-all overflow-hidden"></p>
+                    <div id="calc-display" class="text-2xl font-black tracking-tight mt-1 overflow-hidden">0</div>
+                </div>
+                <div class="grid grid-cols-4 gap-2 h-full">
+                    <button onclick="calcClear()" class="calc-btn text-red-400">C</button>
+                    <button onclick="calcOp('/')" class="calc-btn text-blue-400">÷</button>
+                    <button onclick="calcOp('*')" class="calc-btn text-blue-400">×</button>
+                    <button onclick="calcDelete()" class="calc-btn text-neutral-400"><i
+                            class="fas fa-backspace"></i></button>
+
+                    <button onclick="calcNum('7')" class="calc-btn">7</button>
+                    <button onclick="calcNum('8')" class="calc-btn">8</button>
+                    <button onclick="calcNum('9')" class="calc-btn">9</button>
+                    <button onclick="calcOp('-')" class="calc-btn text-blue-400">−</button>
+
+                    <button onclick="calcNum('4')" class="calc-btn">4</button>
+                    <button onclick="calcNum('5')" class="calc-btn">5</button>
+                    <button onclick="calcNum('6')" class="calc-btn">6</button>
+                    <button onclick="calcOp('+')" class="calc-btn text-blue-400">+</button>
+
+                    <button onclick="calcNum('1')" class="calc-btn">1</button>
+                    <button onclick="calcNum('2')" class="calc-btn">2</button>
+                    <button onclick="calcNum('3')" class="calc-btn">3</button>
+                    <button onclick="calcEqual()"
+                        class="calc-btn bg-white text-black btn-inverted-bg text-color-inverted-bg row-span-2">=</button>
+
+                    <button onclick="calcNum('0')" class="calc-btn col-span-2">0</button>
+                    <button onclick="calcNum('.')" class="calc-btn">.</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Firebase configuration info is handled in JS now -->
+        <script src="script.js"></script>
+</body>
+
+</html>
